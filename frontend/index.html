@@ -1,0 +1,271 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MathBoard</title>
+    <!-- React & ReactDOM -->
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.development.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+    <!-- Babel for JSX -->
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <!-- Axios -->
+    <script src="https://unpkg.com/axios/dist/axios.min.js"></script>
+
+    <style>
+        body {
+            margin: 0;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
+            'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
+            sans-serif;
+            -webkit-font-smoothing: antialiased;
+            -moz-osx-font-smoothing: grayscale;
+            overflow: hidden;
+        }
+
+        .App {
+            width: 100vw;
+            height: 100vh;
+        }
+
+        .canvas {
+            width: 100%;
+            height: 100%;
+            position: relative;
+            background-image: linear-gradient(#ddd 1px, transparent 1px), linear-gradient(90deg, #ddd 1px, transparent 1px);
+            background-size: 20px 20px;
+            background-color: #fff;
+        }
+
+        .region-container:hover {
+            border: 1px dashed #ccc !important;
+        }
+        .region-container:hover .handle {
+            display: block !important;
+        }
+
+        .math-region input {
+            font-family: monospace;
+            font-size: 1.2em;
+        }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState, useRef, useEffect } = React;
+
+        const MathRegion = ({ content, onContentChange, result }) => {
+            const [loading, setLoading] = useState(false);
+            const [error, setError] = useState(null);
+
+            const handleKeyDown = async (e) => {
+                if (e.key === 'Enter') {
+                    e.preventDefault();
+                    setLoading(true);
+                    setError(null);
+                    try {
+                        const response = await axios.post('http://localhost:5000/evaluate', {
+                            expression: content
+                        });
+                        onContentChange(content, response.data.result);
+                    } catch (err) {
+                        console.error(err);
+                        setError(err.response?.data?.error || 'Error evaluating');
+                        onContentChange(content, null);
+                    } finally {
+                        setLoading(false);
+                    }
+                }
+            };
+
+            return (
+                <div className="math-region" style={{ fontFamily: 'monospace', fontSize: '1.2em', display: 'flex', alignItems: 'center' }}>
+                    <input
+                        type="text"
+                        value={content}
+                        onChange={(e) => onContentChange(e.target.value, result)}
+                        onKeyDown={handleKeyDown}
+                        placeholder="Type math..."
+                        style={{ border: 'none', outline: 'none', backgroundColor: 'transparent', width: 'auto', minWidth: '50px' }}
+                    />
+                    {loading && <span style={{ marginLeft: '5px', color: 'gray' }}>...</span>}
+                    {result && <span style={{ marginLeft: '10px', fontWeight: 'bold' }}>= {result}</span>}
+                    {error && <span style={{ marginLeft: '10px', color: 'red', fontSize: '0.8em' }}>{error}</span>}
+                </div>
+            );
+        };
+
+        const TextRegion = ({ content, onContentChange }) => {
+            return (
+                <div className="text-region" style={{ minWidth: '100px' }}>
+                    <textarea
+                        value={content}
+                        onChange={(e) => onContentChange(e.target.value)}
+                        placeholder="Type text..."
+                        style={{
+                            border: 'none',
+                            outline: 'none',
+                            backgroundColor: 'transparent',
+                            resize: 'both',
+                            fontFamily: 'Arial, sans-serif',
+                            width: '100%',
+                            height: '100%'
+                        }}
+                    />
+                </div>
+            );
+        };
+
+        const Region = ({ x, y, children }) => {
+            // Simple custom drag implementation
+            const [pos, setPos] = useState({ x, y });
+            const [dragging, setDragging] = useState(false);
+            const [rel, setRel] = useState({ x: 0, y: 0 }); // Position relative to cursor
+
+            const onMouseDown = (e) => {
+                // Only drag if clicking the handle
+                if (!e.target.classList.contains('handle')) return;
+
+                setDragging(true);
+                setRel({
+                    x: e.pageX - pos.x,
+                    y: e.pageY - pos.y
+                });
+                e.stopPropagation();
+                e.preventDefault();
+            };
+
+            const onMouseMove = (e) => {
+                if (!dragging) return;
+                setPos({
+                    x: e.pageX - rel.x,
+                    y: e.pageY - rel.y
+                });
+                e.stopPropagation();
+                e.preventDefault();
+            };
+
+            const onMouseUp = (e) => {
+                setDragging(false);
+            };
+
+            // Add global mouse listeners when dragging
+            useEffect(() => {
+                if (dragging) {
+                    document.addEventListener('mousemove', onMouseMove);
+                    document.addEventListener('mouseup', onMouseUp);
+                } else {
+                    document.removeEventListener('mousemove', onMouseMove);
+                    document.removeEventListener('mouseup', onMouseUp);
+                }
+                return () => {
+                    document.removeEventListener('mousemove', onMouseMove);
+                    document.removeEventListener('mouseup', onMouseUp);
+                };
+            }, [dragging]);
+
+            return (
+                <div
+                    style={{
+                        position: 'absolute',
+                        left: pos.x,
+                        top: pos.y,
+                        display: 'inline-block',
+                        border: '1px solid transparent',
+                        padding: '5px',
+                        zIndex: dragging ? 1000 : 1
+                    }}
+                    className="region-container"
+                    onMouseDown={onMouseDown}
+                >
+                    <div className="handle" style={{ height: '10px', cursor: 'move', backgroundColor: 'rgba(0,0,0,0.05)', marginBottom: '2px', display: 'none' }}></div>
+                    {children}
+                </div>
+            );
+        };
+
+        const Canvas = () => {
+            const [regions, setRegions] = useState([]);
+            const canvasRef = useRef(null);
+
+            const addRegion = (type, x, y) => {
+                const newRegion = {
+                    id: Date.now(),
+                    type,
+                    x,
+                    y,
+                    content: '',
+                };
+                setRegions([...regions, newRegion]);
+                console.log('Region added:', newRegion);
+            };
+
+            const handleDoubleClick = (e) => {
+                // Ensure we are clicking the canvas and not a region
+                if (e.target === canvasRef.current) {
+                    const rect = canvasRef.current.getBoundingClientRect();
+                    const x = e.clientX - rect.left;
+                    const y = e.clientY - rect.top;
+                    addRegion('math', x, y);
+                }
+            }
+
+            const handleContextMenu = (e) => {
+                e.preventDefault();
+                if (e.target === canvasRef.current) {
+                    const rect = canvasRef.current.getBoundingClientRect();
+                    const x = e.clientX - rect.left;
+                    const y = e.clientY - rect.top;
+                    addRegion('text', x, y);
+                }
+            }
+
+            const updateRegionContent = (id, newContent, result = null) => {
+                setRegions(regions.map(r => r.id === id ? { ...r, content: newContent, result } : r));
+            };
+
+            return (
+                <div
+                    ref={canvasRef}
+                    className="canvas"
+                    onDoubleClick={handleDoubleClick}
+                    onContextMenu={handleContextMenu}
+                >
+                    <div style={{position: 'absolute', top: 10, left: 10, pointerEvents: 'none', color: '#888'}}>
+                        Double-click for Math, Right-click for Text
+                    </div>
+                    {regions.map((region) => (
+                        <Region key={region.id} x={region.x} y={region.y}>
+                            {region.type === 'math' ? (
+                                <MathRegion
+                                    content={region.content}
+                                    onContentChange={(val, res) => updateRegionContent(region.id, val, res)}
+                                    result={region.result}
+                                />
+                            ) : (
+                                <TextRegion
+                                    content={region.content}
+                                    onContentChange={(val) => updateRegionContent(region.id, val)}
+                                />
+                            )}
+                        </Region>
+                    ))}
+                </div>
+            );
+        };
+
+        const App = () => {
+            return (
+                <div className="App">
+                    <Canvas />
+                </div>
+            );
+        };
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
+</body>
+</html>

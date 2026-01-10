@@ -1,0 +1,1 @@
+once a plan has been confirmed keep coding until absolutely stuck and make decisions for the best interest and finish the plan without asking every step
