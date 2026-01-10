@@ -1,1 +1,3 @@
-once a plan has been confirmed keep coding until absolutely stuck and make decisions for the best interest and finish the plan without asking every step
+# Operational Rules
+
+* **Execute Plan Completely**: Once a plan is set, execute the entire plan and stop asking for review until the whole plan is done. Do not pause for intermediate user confirmations unless critically stuck.
