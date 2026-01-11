@@ -10,13 +10,12 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Fira+Code:wght@400;500&display=swap" rel="stylesheet">
     
     <!-- Scripts -->
-    <script crossorigin src="https://unpkg.com/react@18/umd/react.development.js"></script>
-    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
-    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
-    <script src="https://unpkg.com/axios/dist/axios.min.js"></script>
-    <script src="//unpkg.com/mathlive"></script>
-    <script src="https://cdn.plot.ly/plotly-2.24.1.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/lucide-static@0.257.0/lib/index.min.js"></script>
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.development.js?v=2"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.development.js?v=2"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js?v=2"></script>
+    <script src="https://unpkg.com/axios/dist/axios.min.js?v=2"></script>
+    <script src="https://unpkg.com/mathlive?v=2"></script>
+    <script src="https://cdn.plot.ly/plotly-2.24.1.min.js?v=2"></script>
 
     <style>
         :root {
@@ -168,66 +167,74 @@
         .region-card {
             position: absolute;
             background: white;
-            border: 1px solid transparent;
-            border-radius: 4px;
-            transition: border-color 0.2s, box-shadow 0.2s;
+            border: 1px solid #e2e8f0;
+            border-radius: 6px;
+            transition: all 0.2s;
             cursor: default;
-            padding: 4px;
+            padding: 2px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.05);
         }
 
         .region-card:hover {
-            border-color: #cbd5e1;
-            box-shadow: 0 4px 12px -2px rgba(0,0,0,0.08);
+            border-color: var(--primary);
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
+            z-index: 1000 !important;
         }
 
         .region-card.dragging {
-            opacity: 0.7;
+            opacity: 0.8;
             cursor: move;
-            box-shadow: 0 8px 24px -4px rgba(0,0,0,0.12);
+            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1);
         }
 
         .region-drag-handle {
-            height: 4px;
-            background: #f1f5f9;
+            height: 12px;
+            background: #f8fafc;
             cursor: move;
-            border-radius: 4px;
-            margin-bottom: 4px;
-            opacity: 0;
-            transition: opacity 0.2s;
+            border-radius: 4px 4px 0 0;
+            margin-bottom: 2px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-bottom: 1px solid #f1f5f9;
         }
-
-        .region-card:hover .region-drag-handle {
-            opacity: 1;
+        
+        .region-drag-handle::after {
+            content: ':::';
+            color: #cbd5e1;
+            font-size: 10px;
+            letter-spacing: 2px;
+            font-weight: 700;
         }
 
         .math-content {
             display: flex;
             align-items: center;
             gap: 12px;
-            min-height: 40px;
-            padding: 4px 8px;
+            min-height: 44px;
+            padding: 6px 10px;
         }
 
         math-field {
-            font-family: 'Fira Code', monospace;
-            font-size: 1.15rem;
-            border: none;
-            background: transparent;
-            padding: 4px;
-            min-width: 60px;
+            display: block;
+            visibility: visible !important;
+            pointer-events: auto !important;
+            /* Allow MathLive to handle its own internal styling mostly */
         }
 
         math-field:focus-within {
-            outline: none;
+            box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
         }
 
         .result-display {
             font-family: 'Fira Code', monospace;
             font-weight: 600;
             color: var(--primary);
-            border-left: 2px solid #f1f5f9;
-            padding-left: 12px;
-            font-size: 1.1rem;
+            background: #f0f7ff;
+            padding: 4px 12px;
+            border-radius: 4px;
+            font-size: 1.15rem;
+            white-space: nowrap;
         }
 
         .text-region-textarea {
@@ -291,18 +298,18 @@
 
         /* Help Drawer */
         .help-drawer {
-            position: absolute;
+            position: fixed;
             right: 20px;
-            top: 120px;
+            top: 130px;
             width: 280px;
-            background: rgba(255,255,255,0.9);
-            backdrop-filter: blur(8px);
+            background: rgba(255,255,255,0.95);
+            backdrop-filter: blur(12px);
             border: 1px solid var(--border-color);
             border-radius: 12px;
             box-shadow: var(--shadow-md);
-            z-index: 1500;
-            padding: 16px;
-            transition: transform 0.3s ease;
+            z-index: 5000;
+            padding: 18px;
+            transition: transform 0.4s cubic-bezier(0.4, 0, 0.2, 1);
         }
 
         .help-drawer.closed {
@@ -356,8 +363,25 @@
             const plotRef = useRef(null);
 
             useEffect(() => {
-                if (mfRef.current && mfRef.current.value !== content) {
-                    mfRef.current.value = content;
+                const mf = mfRef.current;
+                if (!mf) return;
+
+                // Sync initial content
+                if (mf.value !== content) {
+                    mf.value = content;
+                }
+
+                // If this is a brand new region (no content), focus it
+                if (!content) {
+                    setTimeout(() => mf.focus(), 250);
+                }
+            }, []); // Run once on mount
+
+            // Sync external updates (only if NOT focused)
+            useEffect(() => {
+                const mf = mfRef.current;
+                if (mf && mf.value !== content && document.activeElement !== mf) {
+                    mf.value = content;
                 }
             }, [content]);
 
@@ -383,26 +407,38 @@
                 }
             }, [result]);
 
-            const handleInput = (e) => {
-                if (content !== e.target.value) {
-                    onContentChange(e.target.value);
-                }
-            };
-
             const isPlot = result && result.type === 'plot';
 
             return (
-                <div style={{display: 'flex', flexDirection: 'column'}}>
-                    <div className="math-content">
+                <div className="math-region-container" style={{ display: 'flex', flexDirection: 'column' }}>
+                    <div className="math-content" style={{ position: 'relative', zIndex: 1 }}>
                         <math-field
                             ref={mfRef}
-                            onInput={handleInput}
+                            onInput={(e) => {
+                                onContentChange(e.target.value);
+                            }}
+                            style={{ 
+                                pointerEvents: 'auto',
+                                cursor: 'text',
+                                minWidth: '150px',
+                                display: 'inline-block',
+                                border: '1px solid #e2e8f0',
+                                borderRadius: '4px',
+                                padding: '6px 12px',
+                                fontSize: '1.25rem',
+                                background: 'white'
+                            }}
                         >
                             {content}
                         </math-field>
+                        
                         {result && !isPlot && (
                             <div className="result-display">
-                                {result.startsWith('Error') ? <span style={{color: '#ef4444'}}>⚠</span> : `= ${result}`}
+                                {result.startsWith('Error') ? (
+                                    <span title={result} style={{color: '#ef4444'}}>⚠</span>
+                                ) : (
+                                    `= ${result}`
+                                )}
                             </div>
                         )}
                     </div>
@@ -511,7 +547,7 @@
 
                     setStatus('Calculating...');
                     try {
-                        const response = await axios.post('http://localhost:5000/evaluate', {
+                        const response = await axios.post('/evaluate', {
                             regions: mathRegions
                         });
                         const results = response.data.results;
@@ -541,8 +577,8 @@
                 setRegions([...regions, newRegion]);
             };
 
-            const handleCanvasClick = (e) => {
-                if (e.detail === 2 && e.target === canvasRef.current) {
+            const handleDoubleClick = (e) => {
+                if (!e.target.closest('.region-card')) {
                     const rect = canvasRef.current.getBoundingClientRect();
                     addRegion('math', e.clientX - rect.left, e.clientY - rect.top);
                 }
@@ -550,7 +586,7 @@
 
             const handleContextMenu = (e) => {
                 e.preventDefault();
-                if (e.target === canvasRef.current) {
+                if (!e.target.closest('.region-card')) {
                     const rect = canvasRef.current.getBoundingClientRect();
                     addRegion('text', e.clientX - rect.left, e.clientY - rect.top);
                 }
@@ -674,7 +710,7 @@
                         <div 
                             ref={canvasRef}
                             className="canvas"
-                            onClick={handleCanvasClick}
+                            onDoubleClick={handleDoubleClick}
                             onContextMenu={handleContextMenu}
                         >
                             <div style={{position: 'absolute', top: 40, left: 40, pointerEvents: 'none', color: '#cbd5e1', fontSize: '1.5rem', fontWeight: 700, opacity: 0.5}}>
