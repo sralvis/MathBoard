@@ -11,6 +11,8 @@
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
     <!-- Axios -->
     <script src="https://unpkg.com/axios/dist/axios.min.js"></script>
+    <!-- MathLive -->
+    <script src="//unpkg.com/mathlive"></script>
 
     <style>
         body {
@@ -44,9 +46,44 @@
             display: block !important;
         }
 
-        .math-region input {
-            font-family: monospace;
+        math-field {
             font-size: 1.2em;
+            background: transparent;
+            border: none;
+            outline: none;
+        }
+
+        math-field:focus-within {
+            outline: none;
+            background: rgba(0, 0, 0, 0.02);
+        }
+
+        .toolbar {
+            position: absolute;
+            top: 10px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: white;
+            padding: 5px 10px;
+            border-radius: 5px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+            z-index: 1000;
+            display: flex;
+            gap: 10px;
+        }
+
+        .toolbar button {
+            background: #f0f0f0;
+            border: 1px solid #ccc;
+            border-radius: 3px;
+            padding: 5px 10px;
+            cursor: pointer;
+            font-family: monospace;
+            font-size: 1.1em;
+        }
+
+        .toolbar button:hover {
+            background: #e0e0e0;
         }
     </style>
 </head>
@@ -54,45 +91,56 @@
     <div id="root"></div>
 
     <script type="text/babel">
-        const { useState, useRef, useEffect } = React;
+        const { useState, useRef, useEffect, useCallback } = React;
 
-        const MathRegion = ({ content, onContentChange, result }) => {
-            const [loading, setLoading] = useState(false);
-            const [error, setError] = useState(null);
+        // Custom Hook for Debounce
+        function useDebounce(value, delay) {
+            const [debouncedValue, setDebouncedValue] = useState(value);
+            useEffect(() => {
+                const handler = setTimeout(() => {
+                    setDebouncedValue(value);
+                }, delay);
+                return () => {
+                    clearTimeout(handler);
+                };
+            }, [value, delay]);
+            return debouncedValue;
+        }
 
-            const handleKeyDown = async (e) => {
-                if (e.key === 'Enter') {
-                    e.preventDefault();
-                    setLoading(true);
-                    setError(null);
-                    try {
-                        const response = await axios.post('http://localhost:5000/evaluate', {
-                            expression: content
-                        });
-                        onContentChange(content, response.data.result);
-                    } catch (err) {
-                        console.error(err);
-                        setError(err.response?.data?.error || 'Error evaluating');
-                        onContentChange(content, null);
-                    } finally {
-                        setLoading(false);
-                    }
+        const MathRegion = ({ content, onContentChange, result, isActive, onFocus }) => {
+            const mfRef = useRef(null);
+
+            // Sync content TO MathLive
+            useEffect(() => {
+                if (mfRef.current && mfRef.current.value !== content) {
+                     // Only update if significantly different to avoid cursor jumping
+                     // MathLive value usually normalizes LaTeX, so simple strict equality check is okay for now
+                     mfRef.current.value = content;
+                }
+            }, [content]);
+
+            const handleInput = (e) => {
+                // Avoid infinite loop if the value is effectively the same
+                if (content !== e.target.value) {
+                    onContentChange(e.target.value);
                 }
             };
 
             return (
-                <div className="math-region" style={{ fontFamily: 'monospace', fontSize: '1.2em', display: 'flex', alignItems: 'center' }}>
-                    <input
-                        type="text"
-                        value={content}
-                        onChange={(e) => onContentChange(e.target.value, result)}
-                        onKeyDown={handleKeyDown}
-                        placeholder="Type math..."
-                        style={{ border: 'none', outline: 'none', backgroundColor: 'transparent', width: 'auto', minWidth: '50px' }}
-                    />
-                    {loading && <span style={{ marginLeft: '5px', color: 'gray' }}>...</span>}
-                    {result && <span style={{ marginLeft: '10px', fontWeight: 'bold' }}>= {result}</span>}
-                    {error && <span style={{ marginLeft: '10px', color: 'red', fontSize: '0.8em' }}>{error}</span>}
+                <div
+                    className="math-region"
+                    style={{ display: 'flex', alignItems: 'center' }}
+                    onClick={onFocus}
+                >
+                    <math-field
+                        ref={mfRef}
+                        onInput={handleInput}
+                        style={{ minWidth: '50px' }}
+                    >
+                        {content}
+                    </math-field>
+                    {result && !result.startsWith('Error') && <span style={{ marginLeft: '10px', fontWeight: 'bold' }}>= {result}</span>}
+                    {result && result.startsWith('Error') && <span style={{ marginLeft: '10px', color: 'red', fontSize: '0.8em' }}>{result}</span>}
                 </div>
             );
         };
@@ -118,40 +166,40 @@
             );
         };
 
-        const Region = ({ x, y, children }) => {
-            // Simple custom drag implementation
+        const Region = ({ id, x, y, children, onMove }) => {
             const [pos, setPos] = useState({ x, y });
             const [dragging, setDragging] = useState(false);
-            const [rel, setRel] = useState({ x: 0, y: 0 }); // Position relative to cursor
+            const [rel, setRel] = useState({ x: 0, y: 0 });
+
+            // Sync props to internal state
+            useEffect(() => {
+                if (!dragging) {
+                    setPos({ x, y });
+                }
+            }, [x, y, dragging]);
 
             const onMouseDown = (e) => {
-                // Only drag if clicking the handle
                 if (!e.target.classList.contains('handle')) return;
-
                 setDragging(true);
-                setRel({
-                    x: e.pageX - pos.x,
-                    y: e.pageY - pos.y
-                });
+                setRel({ x: e.pageX - pos.x, y: e.pageY - pos.y });
                 e.stopPropagation();
                 e.preventDefault();
             };
 
             const onMouseMove = (e) => {
                 if (!dragging) return;
-                setPos({
-                    x: e.pageX - rel.x,
-                    y: e.pageY - rel.y
-                });
+                setPos({ x: e.pageX - rel.x, y: e.pageY - rel.y });
                 e.stopPropagation();
                 e.preventDefault();
             };
 
             const onMouseUp = (e) => {
-                setDragging(false);
+                if (dragging) {
+                    setDragging(false);
+                    onMove(id, pos.x, pos.y);
+                }
             };
 
-            // Add global mouse listeners when dragging
             useEffect(() => {
                 if (dragging) {
                     document.addEventListener('mousemove', onMouseMove);
@@ -160,11 +208,8 @@
                     document.removeEventListener('mousemove', onMouseMove);
                     document.removeEventListener('mouseup', onMouseUp);
                 }
-                return () => {
-                    document.removeEventListener('mousemove', onMouseMove);
-                    document.removeEventListener('mouseup', onMouseUp);
-                };
-            }, [dragging]);
+                return () => document.removeEventListener('mousemove', onMouseMove);
+            }, [dragging, pos]);
 
             return (
                 <div
@@ -186,29 +231,70 @@
             );
         };
 
+        const Toolbar = ({ onInsertGlobal }) => {
+            return (
+                <div className="toolbar">
+                    <button onClick={onInsertGlobal} title="Global Definition">Global (≡)</button>
+                </div>
+            );
+        };
+
         const Canvas = () => {
             const [regions, setRegions] = useState([]);
+            const [activeMathField, setActiveMathField] = useState(null);
             const canvasRef = useRef(null);
+
+            const debouncedRegions = useDebounce(regions, 500);
+
+            useEffect(() => {
+                const evaluate = async () => {
+                    const mathRegions = debouncedRegions.filter(r => r.type === 'math');
+                    if (mathRegions.length === 0) return;
+
+                    try {
+                        const response = await axios.post('http://localhost:5000/evaluate', {
+                            regions: mathRegions
+                        });
+                        const results = response.data.results;
+
+                        setRegions(prevRegions => {
+                            let hasChanged = false;
+                            const newRegions = prevRegions.map(r => {
+                                if (results[r.id] !== undefined) {
+                                    if (r.result !== results[r.id]) {
+                                        hasChanged = true;
+                                        return { ...r, result: results[r.id] };
+                                    }
+                                }
+                                return r;
+                            });
+
+                            // Only update state if results actually changed to prevent infinite loop
+                            return hasChanged ? newRegions : prevRegions;
+                        });
+                    } catch (err) {
+                        console.error("Evaluation error", err);
+                    }
+                };
+                evaluate();
+            }, [debouncedRegions]);
 
             const addRegion = (type, x, y) => {
                 const newRegion = {
-                    id: Date.now(),
+                    id: Date.now().toString(),
                     type,
                     x,
                     y,
                     content: '',
+                    result: null
                 };
                 setRegions([...regions, newRegion]);
-                console.log('Region added:', newRegion);
             };
 
             const handleDoubleClick = (e) => {
-                // Ensure we are clicking the canvas and not a region
                 if (e.target === canvasRef.current) {
                     const rect = canvasRef.current.getBoundingClientRect();
-                    const x = e.clientX - rect.left;
-                    const y = e.clientY - rect.top;
-                    addRegion('math', x, y);
+                    addRegion('math', e.clientX - rect.left, e.clientY - rect.top);
                 }
             }
 
@@ -216,42 +302,62 @@
                 e.preventDefault();
                 if (e.target === canvasRef.current) {
                     const rect = canvasRef.current.getBoundingClientRect();
-                    const x = e.clientX - rect.left;
-                    const y = e.clientY - rect.top;
-                    addRegion('text', x, y);
+                    addRegion('text', e.clientX - rect.left, e.clientY - rect.top);
                 }
             }
 
-            const updateRegionContent = (id, newContent, result = null) => {
-                setRegions(regions.map(r => r.id === id ? { ...r, content: newContent, result } : r));
+            const updateRegionContent = (id, newContent) => {
+                setRegions(prev => prev.map(r => r.id === id ? { ...r, content: newContent } : r));
+            };
+
+            const updateRegionPosition = (id, x, y) => {
+                setRegions(prev => prev.map(r => r.id === id ? { ...r, x, y } : r));
+            };
+
+            const handleInsertGlobal = () => {
+                const activeEl = document.activeElement;
+                if (activeEl && activeEl.tagName.toLowerCase() === 'math-field') {
+                    activeEl.executeCommand(['insert', '\\equiv']);
+                    activeEl.focus();
+                }
             };
 
             return (
-                <div
-                    ref={canvasRef}
-                    className="canvas"
-                    onDoubleClick={handleDoubleClick}
-                    onContextMenu={handleContextMenu}
-                >
-                    <div style={{position: 'absolute', top: 10, left: 10, pointerEvents: 'none', color: '#888'}}>
-                        Double-click for Math, Right-click for Text
+                <div style={{ width: '100%', height: '100%' }}>
+                    <Toolbar onInsertGlobal={handleInsertGlobal} />
+                    <div
+                        ref={canvasRef}
+                        className="canvas"
+                        onDoubleClick={handleDoubleClick}
+                        onContextMenu={handleContextMenu}
+                    >
+                        <div style={{position: 'absolute', top: 50, left: 10, pointerEvents: 'none', color: '#888'}}>
+                            Double-click: Math | Right-click: Text | Move regions to change order
+                        </div>
+                        {regions.map((region) => (
+                            <Region
+                                key={region.id}
+                                id={region.id}
+                                x={region.x}
+                                y={region.y}
+                                onMove={updateRegionPosition}
+                            >
+                                {region.type === 'math' ? (
+                                    <MathRegion
+                                        content={region.content}
+                                        result={region.result}
+                                        onContentChange={(val) => updateRegionContent(region.id, val)}
+                                        onFocus={() => {}}
+                                    />
+                                ) : (
+                                    <TextRegion
+                                        content={region.content}
+                                        onContentChange={(val) => updateRegionContent(region.id, val)}
+                                    />
+                                )}
+                            </Region>
+                        ))}
                     </div>
-                    {regions.map((region) => (
-                        <Region key={region.id} x={region.x} y={region.y}>
-                            {region.type === 'math' ? (
-                                <MathRegion
-                                    content={region.content}
-                                    onContentChange={(val, res) => updateRegionContent(region.id, val, res)}
-                                    result={region.result}
-                                />
-                            ) : (
-                                <TextRegion
-                                    content={region.content}
-                                    onContentChange={(val) => updateRegionContent(region.id, val)}
-                                />
-                            )}
-                        </Region>
-                    ))}
                 </div>
             );
         };
