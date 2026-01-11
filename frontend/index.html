@@ -3,87 +3,332 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>MathBoard</title>
-    <!-- React & ReactDOM -->
+    <title>MathBoard | Advanced Engineering Workspace</title>
+    <!-- Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Fira+Code:wght@400;500&display=swap" rel="stylesheet">
+    
+    <!-- Scripts -->
     <script crossorigin src="https://unpkg.com/react@18/umd/react.development.js"></script>
     <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
-    <!-- Babel for JSX -->
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
-    <!-- Axios -->
     <script src="https://unpkg.com/axios/dist/axios.min.js"></script>
-    <!-- MathLive -->
     <script src="//unpkg.com/mathlive"></script>
+    <script src="https://cdn.plot.ly/plotly-2.24.1.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/lucide-static@0.257.0/lib/index.min.js"></script>
 
     <style>
-        body {
+        :root {
+            --primary: #2563eb;
+            --primary-hover: #1d4ed8;
+            --bg-canvas: #f8fafc;
+            --bg-ribbon: #ffffff;
+            --border-color: #e2e8f0;
+            --text-main: #0f172a;
+            --text-muted: #64748b;
+            --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+            --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.1);
+            --grid-color: #f1f5f9;
+        }
+
+        body, html {
             margin: 0;
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
-            'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
-            sans-serif;
-            -webkit-font-smoothing: antialiased;
-            -moz-osx-font-smoothing: grayscale;
+            padding: 0;
+            font-family: 'Inter', sans-serif;
+            background: var(--bg-canvas);
+            color: var(--text-main);
             overflow: hidden;
+            height: 100%;
         }
 
         .App {
-            width: 100vw;
+            display: flex;
+            flex-direction: column;
             height: 100vh;
         }
 
-        .canvas {
-            width: 100%;
-            height: 100%;
-            position: relative;
-            background-image: linear-gradient(#ddd 1px, transparent 1px), linear-gradient(90deg, #ddd 1px, transparent 1px);
-            background-size: 20px 20px;
-            background-color: #fff;
+        /* Ribbon Styles */
+        .ribbon {
+            background: var(--bg-ribbon);
+            border-bottom: 1px solid var(--border-color);
+            z-index: 1000;
+            display: flex;
+            flex-direction: column;
+            box-shadow: var(--shadow-sm);
         }
 
-        .region-container:hover {
-            border: 1px dashed #ccc !important;
+        .ribbon-tabs {
+            display: flex;
+            padding: 0 20px;
+            background: #f8fafc;
+            gap: 2px;
         }
-        .region-container:hover .handle {
-            display: block !important;
+
+        .ribbon-tab {
+            padding: 8px 16px;
+            font-size: 0.82rem;
+            font-weight: 500;
+            color: var(--text-muted);
+            cursor: pointer;
+            border-bottom: 2px solid transparent;
+            transition: all 0.2s;
+        }
+
+        .ribbon-tab.active {
+            color: var(--primary);
+            border-bottom: 2px solid var(--primary);
+            background: white;
+        }
+
+        .ribbon-content {
+            padding: 12px 24px;
+            display: flex;
+            gap: 24px;
+            align-items: center;
+            height: 85px;
+            background: white;
+        }
+
+        .ribbon-group {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+            border-right: 1px solid #f1f5f9;
+            padding-right: 24px;
+            height: 100%;
+        }
+
+        .ribbon-group:last-child {
+            border-right: none;
+        }
+
+        .ribbon-group-label {
+            font-size: 0.65rem;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            color: #94a3b8;
+            text-align: center;
+            margin-top: auto;
+        }
+
+        .ribbon-actions {
+            display: flex;
+            gap: 12px;
+            align-items: center;
+        }
+
+        .ribbon-btn {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 4px;
+            padding: 6px 10px;
+            border: 1px solid transparent;
+            border-radius: 6px;
+            background: transparent;
+            cursor: pointer;
+            transition: all 0.2s;
+            min-width: 64px;
+            color: #475569;
+        }
+
+        .ribbon-btn:hover {
+            background: #f1f5f9;
+            color: var(--primary);
+        }
+
+        .ribbon-btn i {
+            font-size: 1.25rem;
+        }
+
+        .ribbon-btn-text {
+            font-size: 0.72rem;
+            font-weight: 500;
+        }
+
+        /* Canvas Styles */
+        .workspace {
+            flex: 1;
+            position: relative;
+            overflow: auto;
+            background-color: white;
+            background-image: 
+                radial-gradient(var(--grid-color) 1px, transparent 1px);
+            background-size: 20px 20px;
+        }
+
+        .canvas {
+            min-width: 4000px;
+            min-height: 4000px;
+            position: relative;
+        }
+
+        /* Region Styles */
+        .region-card {
+            position: absolute;
+            background: white;
+            border: 1px solid transparent;
+            border-radius: 4px;
+            transition: border-color 0.2s, box-shadow 0.2s;
+            cursor: default;
+            padding: 4px;
+        }
+
+        .region-card:hover {
+            border-color: #cbd5e1;
+            box-shadow: 0 4px 12px -2px rgba(0,0,0,0.08);
+        }
+
+        .region-card.dragging {
+            opacity: 0.7;
+            cursor: move;
+            box-shadow: 0 8px 24px -4px rgba(0,0,0,0.12);
+        }
+
+        .region-drag-handle {
+            height: 4px;
+            background: #f1f5f9;
+            cursor: move;
+            border-radius: 4px;
+            margin-bottom: 4px;
+            opacity: 0;
+            transition: opacity 0.2s;
+        }
+
+        .region-card:hover .region-drag-handle {
+            opacity: 1;
+        }
+
+        .math-content {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            min-height: 40px;
+            padding: 4px 8px;
         }
 
         math-field {
-            font-size: 1.2em;
-            background: transparent;
+            font-family: 'Fira Code', monospace;
+            font-size: 1.15rem;
             border: none;
-            outline: none;
+            background: transparent;
+            padding: 4px;
+            min-width: 60px;
         }
 
         math-field:focus-within {
             outline: none;
-            background: rgba(0, 0, 0, 0.02);
         }
 
-        .toolbar {
-            position: absolute;
-            top: 10px;
-            left: 50%;
-            transform: translateX(-50%);
+        .result-display {
+            font-family: 'Fira Code', monospace;
+            font-weight: 600;
+            color: var(--primary);
+            border-left: 2px solid #f1f5f9;
+            padding-left: 12px;
+            font-size: 1.1rem;
+        }
+
+        .text-region-textarea {
+            border: none;
+            outline: none;
+            padding: 8px;
+            font-family: 'Inter', sans-serif;
+            font-size: 0.95rem;
+            resize: both;
+            background: transparent;
+            color: #334155;
+            min-width: 200px;
+            min-height: 40px;
+            line-height: 1.5;
+        }
+
+        .plot-container {
+            width: 450px;
+            height: 300px;
             background: white;
-            padding: 5px 10px;
-            border-radius: 5px;
-            box-shadow: 0 2px 5px rgba(0,0,0,0.2);
-            z-index: 1000;
+            border-radius: 8px;
+            overflow: hidden;
+        }
+
+        /* Status Bar */
+        .status-bar {
+            height: 28px;
+            background: #f8fafc;
+            border-top: 1px solid var(--border-color);
+            color: #64748b;
+            font-size: 0.72rem;
             display: flex;
-            gap: 10px;
+            align-items: center;
+            padding: 0 20px;
+            justify-content: space-between;
         }
 
-        .toolbar button {
-            background: #f0f0f0;
-            border: 1px solid #ccc;
+        .badge {
+            padding: 2px 8px;
+            border-radius: 4px;
+            background: #e2e8f0;
+            color: #475569;
+            font-weight: 600;
+            margin-left: 4px;
+        }
+
+        /* View Modes */
+        .workspace.page-view {
+            padding: 40px;
+            background-color: #f1f5f9;
+            display: flex;
+            justify-content: center;
+        }
+
+        .workspace.page-view .canvas {
+            background: white;
+            box-shadow: 0 10px 25px -5px rgba(0,0,0,0.1);
+            min-width: 850px; /* Standard A4-ish width */
+            min-height: 1100px;
+        }
+
+        /* Help Drawer */
+        .help-drawer {
+            position: absolute;
+            right: 20px;
+            top: 120px;
+            width: 280px;
+            background: rgba(255,255,255,0.9);
+            backdrop-filter: blur(8px);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            box-shadow: var(--shadow-md);
+            z-index: 1500;
+            padding: 16px;
+            transition: transform 0.3s ease;
+        }
+
+        .help-drawer.closed {
+            transform: translateX(310px);
+        }
+
+        .help-title {
+            font-weight: 700;
+            font-size: 0.9rem;
+            margin-bottom: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .help-item {
+            margin-bottom: 15px;
+            font-size: 0.82rem;
+        }
+
+        .help-item code {
+            background: #f1f5f9;
+            padding: 2px 4px;
             border-radius: 3px;
-            padding: 5px 10px;
-            cursor: pointer;
-            font-family: monospace;
-            font-size: 1.1em;
-        }
-
-        .toolbar button:hover {
-            background: #e0e0e0;
+            font-family: 'Fira Code', monospace;
+            color: var(--primary);
         }
     </style>
 </head>
@@ -93,210 +338,215 @@
     <script type="text/babel">
         const { useState, useRef, useEffect, useCallback } = React;
 
-        // Custom Hook for Debounce
+        // --- Custom Hook for Debounce ---
         function useDebounce(value, delay) {
             const [debouncedValue, setDebouncedValue] = useState(value);
             useEffect(() => {
                 const handler = setTimeout(() => {
                     setDebouncedValue(value);
                 }, delay);
-                return () => {
-                    clearTimeout(handler);
-                };
+                return () => clearTimeout(handler);
             }, [value, delay]);
             return debouncedValue;
         }
 
-        const MathRegion = ({ content, onContentChange, result, isActive, onFocus }) => {
+        // --- Region Components ---
+        const MathRegion = ({ content, result, onContentChange }) => {
             const mfRef = useRef(null);
+            const plotRef = useRef(null);
 
-            // Sync content TO MathLive
             useEffect(() => {
                 if (mfRef.current && mfRef.current.value !== content) {
-                     // Only update if significantly different to avoid cursor jumping
-                     // MathLive value usually normalizes LaTeX, so simple strict equality check is okay for now
-                     mfRef.current.value = content;
+                    mfRef.current.value = content;
                 }
             }, [content]);
 
+            useEffect(() => {
+                if (result && result.type === 'plot' && plotRef.current) {
+                    const trace = {
+                        x: result.data.map(p => p.x),
+                        y: result.data.map(p => p.y),
+                        type: 'scatter',
+                        mode: 'lines',
+                        line: { color: '#2563eb', width: 2.5, shape: 'spline' }
+                    };
+                    const layout = {
+                        margin: { t: 30, r: 20, b: 30, l: 40 },
+                        paper_bgcolor: 'rgba(0,0,0,0)',
+                        plot_bgcolor: 'rgba(0,0,0,0)',
+                        xaxis: { gridcolor: '#f1f5f9', zeroline: false },
+                        yaxis: { gridcolor: '#f1f5f9', zeroline: false },
+                        hovermode: 'closest',
+                        font: { family: 'Inter', size: 10 }
+                    };
+                    Plotly.newPlot(plotRef.current, [trace], layout, { responsive: true, displayModeBar: false });
+                }
+            }, [result]);
+
             const handleInput = (e) => {
-                // Avoid infinite loop if the value is effectively the same
                 if (content !== e.target.value) {
                     onContentChange(e.target.value);
                 }
             };
 
+            const isPlot = result && result.type === 'plot';
+
             return (
-                <div
-                    className="math-region"
-                    style={{ display: 'flex', alignItems: 'center' }}
-                    onClick={onFocus}
-                >
-                    <math-field
-                        ref={mfRef}
-                        onInput={handleInput}
-                        style={{ minWidth: '50px' }}
-                    >
-                        {content}
-                    </math-field>
-                    {result && !result.startsWith('Error') && <span style={{ marginLeft: '10px', fontWeight: 'bold' }}>= {result}</span>}
-                    {result && result.startsWith('Error') && <span style={{ marginLeft: '10px', color: 'red', fontSize: '0.8em' }}>{result}</span>}
+                <div style={{display: 'flex', flexDirection: 'column'}}>
+                    <div className="math-content">
+                        <math-field
+                            ref={mfRef}
+                            onInput={handleInput}
+                        >
+                            {content}
+                        </math-field>
+                        {result && !isPlot && (
+                            <div className="result-display">
+                                {result.startsWith('Error') ? <span style={{color: '#ef4444'}}>⚠</span> : `= ${result}`}
+                            </div>
+                        )}
+                    </div>
+                    {isPlot && (
+                        <div ref={plotRef} className="plot-container"></div>
+                    )}
                 </div>
             );
         };
 
         const TextRegion = ({ content, onContentChange }) => {
             return (
-                <div className="text-region" style={{ minWidth: '100px' }}>
-                    <textarea
-                        value={content}
-                        onChange={(e) => onContentChange(e.target.value)}
-                        placeholder="Type text..."
-                        style={{
-                            border: 'none',
-                            outline: 'none',
-                            backgroundColor: 'transparent',
-                            resize: 'both',
-                            fontFamily: 'Arial, sans-serif',
-                            width: '100%',
-                            height: '100%'
-                        }}
-                    />
-                </div>
+                <textarea
+                    className="text-region-textarea"
+                    value={content}
+                    onChange={(e) => onContentChange(e.target.value)}
+                    placeholder="Engineering notes..."
+                />
             );
         };
 
-        const Region = ({ id, x, y, children, onMove }) => {
+        const RegionWrapper = ({ id, x, y, type, content, result, onMove, onContentUpdate, onDelete }) => {
             const [pos, setPos] = useState({ x, y });
-            const [dragging, setDragging] = useState(false);
-            const [rel, setRel] = useState({ x: 0, y: 0 });
+            const [isDragging, setIsDragging] = useState(false);
+            const dragStart = useRef({ x: 0, y: 0 });
 
-            // Sync props to internal state
             useEffect(() => {
-                if (!dragging) {
-                    setPos({ x, y });
-                }
-            }, [x, y, dragging]);
+                if (!isDragging) setPos({ x, y });
+            }, [x, y, isDragging]);
 
             const onMouseDown = (e) => {
-                if (!e.target.classList.contains('handle')) return;
-                setDragging(true);
-                setRel({ x: e.pageX - pos.x, y: e.pageY - pos.y });
-                e.stopPropagation();
+                if (!e.target.closest('.region-drag-handle')) return;
+                setIsDragging(true);
+                dragStart.current = { x: e.clientX - pos.x, y: e.clientY - pos.y };
                 e.preventDefault();
-            };
-
-            const onMouseMove = (e) => {
-                if (!dragging) return;
-                setPos({ x: e.pageX - rel.x, y: e.pageY - rel.y });
-                e.stopPropagation();
-                e.preventDefault();
-            };
-
-            const onMouseUp = (e) => {
-                if (dragging) {
-                    setDragging(false);
-                    onMove(id, pos.x, pos.y);
-                }
             };
 
             useEffect(() => {
-                if (dragging) {
-                    document.addEventListener('mousemove', onMouseMove);
-                    document.addEventListener('mouseup', onMouseUp);
-                } else {
-                    document.removeEventListener('mousemove', onMouseMove);
-                    document.removeEventListener('mouseup', onMouseUp);
+                const onMouseMove = (e) => {
+                    if (!isDragging) return;
+                    const newX = Math.round((e.clientX - dragStart.current.x) / 20) * 20;
+                    const newY = Math.round((e.clientY - dragStart.current.y) / 20) * 20;
+                    setPos({ x: newX, y: newY });
+                };
+
+                const onMouseUp = () => {
+                    if (isDragging) {
+                        setIsDragging(false);
+                        onMove(id, pos.x, pos.y);
+                    }
+                };
+
+                if (isDragging) {
+                    window.addEventListener('mousemove', onMouseMove);
+                    window.addEventListener('mouseup', onMouseUp);
                 }
-                return () => document.removeEventListener('mousemove', onMouseMove);
-            }, [dragging, pos]);
+                return () => {
+                    window.removeEventListener('mousemove', onMouseMove);
+                    window.removeEventListener('mouseup', onMouseUp);
+                };
+            }, [isDragging, pos, id, onMove]);
 
             return (
-                <div
-                    style={{
-                        position: 'absolute',
-                        left: pos.x,
-                        top: pos.y,
-                        display: 'inline-block',
-                        border: '1px solid transparent',
-                        padding: '5px',
-                        zIndex: dragging ? 1000 : 1
-                    }}
-                    className="region-container"
+                <div 
+                    className={`region-card ${isDragging ? 'dragging' : ''}`}
+                    style={{ left: pos.x, top: pos.y, zIndex: isDragging ? 2000 : 10 }}
                     onMouseDown={onMouseDown}
+                    onContextMenu={(e) => {
+                        e.preventDefault();
+                        if (confirm('Delete region?')) onDelete(id);
+                    }}
                 >
-                    <div className="handle" style={{ height: '10px', cursor: 'move', backgroundColor: 'rgba(0,0,0,0.05)', marginBottom: '2px', display: 'none' }}></div>
-                    {children}
+                    <div className="region-drag-handle"></div>
+                    {type === 'math' ? (
+                        <MathRegion 
+                            content={content} 
+                            result={result} 
+                            onContentChange={(val) => onContentUpdate(id, val)} 
+                        />
+                    ) : (
+                        <TextRegion 
+                            content={content} 
+                            onContentChange={(val) => onContentUpdate(id, val)}
+                        />
+                    )}
                 </div>
             );
         };
 
-        const Toolbar = ({ onInsertGlobal }) => {
-            return (
-                <div className="toolbar">
-                    <button onClick={onInsertGlobal} title="Global Definition">Global (≡)</button>
-                </div>
-            );
-        };
-
-        const Canvas = () => {
+        // --- Main App Component ---
+        const App = () => {
             const [regions, setRegions] = useState([]);
-            const [activeMathField, setActiveMathField] = useState(null);
+            const [activeTab, setActiveTab] = useState('math');
+            const [viewMode, setViewMode] = useState('draft'); // 'draft' or 'page'
+            const [status, setStatus] = useState('Ready');
+            const [showHelp, setShowHelp] = useState(true);
             const canvasRef = useRef(null);
+            
+            const debouncedRegions = useDebounce(regions, 600);
 
-            const debouncedRegions = useDebounce(regions, 500);
-
+            // Evaluation Effect
             useEffect(() => {
                 const evaluate = async () => {
-                    const mathRegions = debouncedRegions.filter(r => r.type === 'math');
+                    const mathRegions = debouncedRegions.filter(r => r.type === 'math' && r.content.trim());
                     if (mathRegions.length === 0) return;
 
+                    setStatus('Calculating...');
                     try {
                         const response = await axios.post('http://localhost:5000/evaluate', {
                             regions: mathRegions
                         });
                         const results = response.data.results;
 
-                        setRegions(prevRegions => {
-                            let hasChanged = false;
-                            const newRegions = prevRegions.map(r => {
-                                if (results[r.id] !== undefined) {
-                                    if (r.result !== results[r.id]) {
-                                        hasChanged = true;
-                                        return { ...r, result: results[r.id] };
-                                    }
-                                }
-                                return r;
-                            });
-
-                            // Only update state if results actually changed to prevent infinite loop
-                            return hasChanged ? newRegions : prevRegions;
-                        });
+                        setRegions(prev => prev.map(r => 
+                            results[r.id] !== undefined ? { ...r, result: results[r.id] } : r
+                        ));
+                        setStatus('Ready');
                     } catch (err) {
-                        console.error("Evaluation error", err);
+                        console.error(err);
+                        setStatus('Engine Offline');
                     }
                 };
                 evaluate();
             }, [debouncedRegions]);
 
             const addRegion = (type, x, y) => {
+                const snappedX = Math.round(x / 20) * 20;
+                const snappedY = Math.round(y / 20) * 20;
+                
                 const newRegion = {
                     id: Date.now().toString(),
-                    type,
-                    x,
-                    y,
+                    type, x: snappedX, y: snappedY,
                     content: '',
                     result: null
                 };
                 setRegions([...regions, newRegion]);
             };
 
-            const handleDoubleClick = (e) => {
-                if (e.target === canvasRef.current) {
+            const handleCanvasClick = (e) => {
+                if (e.detail === 2 && e.target === canvasRef.current) {
                     const rect = canvasRef.current.getBoundingClientRect();
                     addRegion('math', e.clientX - rect.left, e.clientY - rect.top);
                 }
-            }
+            };
 
             const handleContextMenu = (e) => {
                 e.preventDefault();
@@ -304,68 +554,180 @@
                     const rect = canvasRef.current.getBoundingClientRect();
                     addRegion('text', e.clientX - rect.left, e.clientY - rect.top);
                 }
-            }
-
-            const updateRegionContent = (id, newContent) => {
-                setRegions(prev => prev.map(r => r.id === id ? { ...r, content: newContent } : r));
             };
 
-            const updateRegionPosition = (id, x, y) => {
+            const updateRegionPos = (id, x, y) => {
                 setRegions(prev => prev.map(r => r.id === id ? { ...r, x, y } : r));
             };
 
-            const handleInsertGlobal = () => {
-                const activeEl = document.activeElement;
-                if (activeEl && activeEl.tagName.toLowerCase() === 'math-field') {
-                    activeEl.executeCommand(['insert', '\\equiv']);
-                    activeEl.focus();
-                }
+            const updateRegionContent = (id, content) => {
+                setRegions(prev => prev.map(r => r.id === id ? { ...r, content } : r));
+            };
+
+            const deleteRegion = (id) => {
+                setRegions(prev => prev.filter(r => r.id !== id));
+            };
+
+            const clearCanvas = () => {
+                if(confirm('Clear entire workspace?')) setRegions([]);
             };
 
             return (
-                <div style={{ width: '100%', height: '100%' }}>
-                    <Toolbar onInsertGlobal={handleInsertGlobal} />
-                    <div
-                        ref={canvasRef}
-                        className="canvas"
-                        onDoubleClick={handleDoubleClick}
-                        onContextMenu={handleContextMenu}
-                    >
-                        <div style={{position: 'absolute', top: 50, left: 10, pointerEvents: 'none', color: '#888'}}>
-                            Double-click: Math | Right-click: Text | Move regions to change order
-                        </div>
-                        {regions.map((region) => (
-                            <Region
-                                key={region.id}
-                                id={region.id}
-                                x={region.x}
-                                y={region.y}
-                                onMove={updateRegionPosition}
-                            >
-                                {region.type === 'math' ? (
-                                    <MathRegion
-                                        content={region.content}
-                                        result={region.result}
-                                        onContentChange={(val) => updateRegionContent(region.id, val)}
-                                        onFocus={() => {}}
-                                    />
-                                ) : (
-                                    <TextRegion
-                                        content={region.content}
-                                        onContentChange={(val) => updateRegionContent(region.id, val)}
-                                    />
-                                )}
-                            </Region>
-                        ))}
-                    </div>
-                </div>
-            );
-        };
-
-        const App = () => {
-            return (
                 <div className="App">
-                    <Canvas />
+                    <header className="ribbon">
+                        <div className="ribbon-tabs">
+                            {['File', 'Math', 'Input/Output', 'Plots', 'View'].map(tab => (
+                                <div 
+                                    key={tab} 
+                                    className={`ribbon-tab ${activeTab === tab.toLowerCase() ? 'active' : ''}`}
+                                    onClick={() => setActiveTab(tab.toLowerCase())}
+                                >
+                                    {tab}
+                                </div>
+                            ))}
+                        </div>
+                        <div className="ribbon-content">
+                            {activeTab === 'file' && (
+                                <div className="ribbon-group">
+                                    <div className="ribbon-actions">
+                                        <button className="ribbon-btn" onClick={clearCanvas}>
+                                            <span style={{fontSize: '1.4rem'}}>📄</span>
+                                            <span className="ribbon-btn-text">New</span>
+                                        </button>
+                                        <button className="ribbon-btn" onClick={() => setShowHelp(!showHelp)}>
+                                            <span style={{fontSize: '1.4rem'}}>💡</span>
+                                            <span className="ribbon-btn-text">Guide</span>
+                                        </button>
+                                    </div>
+                                    <div className="ribbon-group-label">Document</div>
+                                </div>
+                            )}
+                            {(activeTab === 'math') && (
+                                <>
+                                    <div className="ribbon-group">
+                                        <div className="ribbon-actions">
+                                            <button className="ribbon-btn" onClick={() => addRegion('math', 100, 150)}>
+                                                <span style={{fontSize: '1.4rem'}}>±</span>
+                                                <span className="ribbon-btn-text">Expression</span>
+                                            </button>
+                                            <button className="ribbon-btn" onClick={() => {
+                                                const el = document.activeElement;
+                                                if(el && el.tagName === 'MATH-FIELD') el.executeCommand(['insert', '\\equiv']);
+                                            }}>
+                                                <span style={{fontSize: '1.4rem'}}>≡</span>
+                                                <span className="ribbon-btn-text">Global Def</span>
+                                            </button>
+                                        </div>
+                                        <div className="ribbon-group-label">Regions</div>
+                                    </div>
+                                    <div className="ribbon-group">
+                                        <div className="ribbon-actions">
+                                            <button className="ribbon-btn" onClick={() => {
+                                                const el = document.activeElement;
+                                                if(el && el.tagName === 'MATH-FIELD') el.executeCommand(['insert', '\\sum']);
+                                            }}>
+                                                <span style={{fontSize: '1.4rem'}}>∑</span>
+                                                <span className="ribbon-btn-text">Calculus</span>
+                                            </button>
+                                            <button className="ribbon-btn" onClick={() => {
+                                                const el = document.activeElement;
+                                                if(el && el.tagName === 'MATH-FIELD') el.executeCommand(['insert', '\\rightarrow']);
+                                            }}>
+                                                <span style={{fontSize: '1.4rem'}}>→</span>
+                                                <span className="ribbon-btn-text">Symbolic</span>
+                                            </button>
+                                        </div>
+                                        <div className="ribbon-group-label">Operators</div>
+                                    </div>
+                                </>
+                            )}
+                            {activeTab === 'view' && (
+                                <div className="ribbon-group">
+                                    <div className="ribbon-actions">
+                                        <button className={`ribbon-btn ${viewMode === 'draft' ? 'active' : ''}`} onClick={() => setViewMode('draft')}>
+                                            <span style={{fontSize: '1.4rem'}}>♾️</span>
+                                            <span className="ribbon-btn-text">Draft</span>
+                                        </button>
+                                        <button className={`ribbon-btn ${viewMode === 'page' ? 'active' : ''}`} onClick={() => setViewMode('page')}>
+                                            <span style={{fontSize: '1.4rem'}}>📄</span>
+                                            <span className="ribbon-btn-text">Page</span>
+                                        </button>
+                                    </div>
+                                    <div className="ribbon-group-label">Mode</div>
+                                </div>
+                            )}
+                            {activeTab === 'plots' && (
+                                <div className="ribbon-group">
+                                    <div className="ribbon-actions">
+                                        <button className="ribbon-btn" onClick={() => addRegion('math', 200, 200)}>
+                                            <span style={{fontSize: '1.4rem'}}>📈</span>
+                                            <span className="ribbon-btn-text">Insert Plot</span>
+                                        </button>
+                                    </div>
+                                    <div className="ribbon-group-label">Visualization</div>
+                                </div>
+                            )}
+                        </div>
+                    </header>
+
+                    <main className={`workspace ${viewMode === 'page' ? 'page-view' : ''}`}>
+                        <div 
+                            ref={canvasRef}
+                            className="canvas"
+                            onClick={handleCanvasClick}
+                            onContextMenu={handleContextMenu}
+                        >
+                            <div style={{position: 'absolute', top: 40, left: 40, pointerEvents: 'none', color: '#cbd5e1', fontSize: '1.5rem', fontWeight: 700, opacity: 0.5}}>
+                                MathBoard Workspace
+                            </div>
+                            {regions.map(r => (
+                                <RegionWrapper 
+                                    key={r.id} 
+                                    {...r} 
+                                    onMove={updateRegionPos}
+                                    onContentUpdate={updateRegionContent}
+                                    onDelete={deleteRegion}
+                                />
+                            ))}
+                        </div>
+
+                        <div className={`help-drawer ${showHelp ? '' : 'closed'}`}>
+                            <div className="help-title">
+                                <span>Quick Reference</span>
+                                <span style={{cursor: 'pointer'}} onClick={() => setShowHelp(false)}>✕</span>
+                            </div>
+                            <div className="help-item">
+                                <div><strong>Local Definition:</strong></div>
+                                <code>a := 5</code>
+                            </div>
+                            <div className="help-item">
+                                <div><strong>Global Definition:</strong></div>
+                                <code>g &equiv; 9.81</code>
+                            </div>
+                            <div className="help-item">
+                                <div><strong>Symbolic Eval:</strong></div>
+                                <code>(x+1)^2 &rarr;</code>
+                            </div>
+                            <div className="help-item">
+                                <div><strong>Add Plot:</strong></div>
+                                <code>plot(sin(x), x, 0, 10)</code>
+                            </div>
+                            <div style={{fontSize: '0.75rem', color: '#64748b', marginTop: '20px'}}>
+                                💡 Double-click for Math<br/>
+                                💡 Right-click for Text
+                            </div>
+                        </div>
+                    </main>
+
+                    <footer className="status-bar">
+                        <div>
+                            Status: <span style={{color: status === 'Ready' ? '#10b981' : '#f59e0b', fontWeight: 600}}>{status}</span>
+                        </div>
+                        <div style={{display: 'flex', gap: '20px'}}>
+                            <span>Grid: <span className="badge">20px</span></span>
+                            <span>Engine: <span className="badge">SymPy + Pint</span></span>
+                        </div>
+                    </footer>
                 </div>
             );
         };

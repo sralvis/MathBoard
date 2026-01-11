@@ -53,3 +53,22 @@ def test_evaluate_worksheet_assignment_coloneq():
     ]
     results = evaluate_worksheet(regions)
     assert abs(float(results['2']) - 20.0) < 1e-9
+def test_evaluate_worksheet_symbolic():
+    regions = [
+        {'id': '1', 'content': r'(x + 1)^2 \rightarrow', 'x': 0, 'y': 0}
+    ]
+    results = evaluate_worksheet(regions)
+    # SymPy should simplify/expand or just return the expression
+    # simplify((x+1)**2) might remain (x+1)**2 or expand to x**2 + 2*x + 1 depending on version
+    # but it should return a string representation
+    assert 'x' in results['1']
+
+def test_evaluate_worksheet_plot():
+    regions = [
+        {'id': '1', 'content': r'plot(x^2, x, 0, 5)', 'x': 0, 'y': 0}
+    ]
+    results = evaluate_worksheet(regions)
+    assert results['1']['type'] == 'plot'
+    assert len(results['1']['data']) == 100
+    assert abs(results['1']['data'][0]['y'] - 0.0) < 1e-9
+    assert abs(results['1']['data'][-1]['y'] - 25.0) < 1e-9

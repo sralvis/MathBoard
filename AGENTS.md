@@ -4,7 +4,8 @@
 - publish commits to the branch every hour if you haven't finished
 - give update every hour if not finished
 - make sure .gitignore doesn't sync temporary files that are generated with running the code
-  
+- features are in Concept.md
+- update readme.md with new features
 ## 2. Design Philosophy
 
 -   **KISS:** Prioritize code that a junior developer can understand at a glance.

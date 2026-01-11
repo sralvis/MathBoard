@@ -10,6 +10,14 @@ CORS(app)
 # Configure logging
 logging.basicConfig(level=logging.DEBUG)
 
+@app.route('/')
+def index():
+    return jsonify({
+        'status': 'MathBoard Engine is running',
+        'version': '1.0.0',
+        'endpoints': ['/evaluate']
+    })
+
 @app.route('/evaluate', methods=['POST'])
 def evaluate():
     data = request.json

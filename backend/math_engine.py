@@ -1,23 +1,36 @@
 import sympy
 from sympy.parsing.latex import parse_latex
+from pint import UnitRegistry, UndefinedUnitError
+import re
+import numpy as np
+
+# Initialize Unit Registry
+ureg = UnitRegistry()
+Q_ = ureg.Quantity
 
 def parse_latex_expression(expression_str):
     """
     Parses a LaTeX string into a SymPy expression or assignment.
-    Returns a tuple: (type, name, value)
-    type: 'definition' or 'expression' or 'global_definition'
-    name: variable name (if definition), else None
-    value: SymPy expression object
+    Returns a tuple: (type, name, value, is_symbolic)
     """
     expression_str = expression_str.strip()
+    is_symbolic = False
+
+    # Check for symbolic operator ->
+    if r'\rightarrow' in expression_str:
+        is_symbolic = True
+        parts = expression_str.split(r'\rightarrow')
+        expression_str = parts[0].strip()
+    elif '->' in expression_str:
+        is_symbolic = True
+        parts = expression_str.split('->')
+        expression_str = parts[0].strip()
 
     # Check for Global Definition (\equiv)
     if r'\equiv' in expression_str:
         parts = expression_str.split(r'\equiv')
         if len(parts) == 2:
-            lhs = parts[0].strip()
-            rhs = parts[1].strip()
-            return ('global_definition', lhs, parse_latex(rhs))
+            return ('global_definition', parts[0].strip(), parse_latex(parts[1].strip()), is_symbolic)
 
     # Check for Local Definition (:= or \coloneq)
     definition_op = None
@@ -29,91 +42,120 @@ def parse_latex_expression(expression_str):
     if definition_op:
         parts = expression_str.split(definition_op)
         if len(parts) == 2:
-            lhs = parts[0].strip()
-            rhs = parts[1].strip()
-            return ('definition', lhs, parse_latex(rhs))
+            return ('definition', parts[0].strip(), parse_latex(parts[1].strip()), is_symbolic)
 
     # Standard Expression
     clean_expr = expression_str
     if clean_expr.endswith('='):
         clean_expr = clean_expr[:-1]
 
-    return ('expression', None, parse_latex(clean_expr))
+    # Special case for plot command: plot(expr, var, start, end)
+    # We use a regex because antlr latex parser might fail on 'plot'
+    plot_match = re.match(r'^plot\((.*)\)$', clean_expr)
+    if plot_match:
+        # We'll return a special type or just the parsed content
+        # For now, let's keep it as an expression but mark it
+        try:
+            # Try to parse the inside as a comma-separated list
+            # This is tricky for nested commas, but we'll try a simple split for now
+            # or just return the whole thing and handle it in evaluation
+            return ('plot', None, clean_expr, is_symbolic)
+        except:
+            pass
+
+    return ('expression', None, parse_latex(clean_expr), is_symbolic)
 
 def evaluate_worksheet(regions):
     """
     Evaluates a list of regions based on position and scope.
-    regions: List of dicts {id, content, x, y}
-    Returns: Dict {id: result_string}
     """
-    symbol_table = {}
+    symbol_table = {
+        'pi': sympy.pi,
+        'e': sympy.E,
+        'g': 9.80665
+    }
+    
     results = {}
-
-    # Helper to safe evaluate
-    def safe_eval(expr, symbols):
-        try:
-            # subs all symbols
-            res = expr.evalf(subs=symbols)
-            # Check if result still has free symbols (meaning undefined variables were used)
-            if res.free_symbols:
-                return "Error: Undefined Variable"
-            return res
-        except Exception:
-            return "Error"
-
     parsed_regions = []
 
-    # Parse all regions first
     for region in regions:
         try:
-            rtype, rname, rexpr = parse_latex_expression(region['content'])
+            rtype, rname, rexpr, rsymb = parse_latex_expression(region['content'])
             parsed_regions.append({
                 'id': region['id'],
                 'x': region['x'],
                 'y': region['y'],
                 'type': rtype,
                 'name': rname,
-                'expr': rexpr
+                'expr': rexpr,
+                'symbolic': rsymb
             })
         except Exception as e:
-            results[region['id']] = "Error"
+            results[region['id']] = f"Error: {str(e)}"
 
-    # Pass 1: Global Definitions
-    globals_list = [r for r in parsed_regions if r['type'] == 'global_definition']
-    globals_list.sort(key=lambda r: (r['y'], r['x']))
+    parsed_regions.sort(key=lambda r: (0 if r['type'] == 'global_definition' else 1, r['y'], r['x']))
 
-    for r in globals_list:
+    for r in parsed_regions:
         try:
-            val = safe_eval(r['expr'], symbol_table)
-            if str(val).startswith("Error"):
-                results[r['id']] = val
-            else:
-                symbol_table[parse_latex(r['name'])] = val
-                results[r['id']] = str(val)
-        except Exception as e:
-            results[r['id']] = "Error"
-
-    # Pass 2 & 3: Local Definitions and Expressions
-    locals_list = [r for r in parsed_regions if r['type'] != 'global_definition']
-    locals_list.sort(key=lambda r: (r['y'], r['x']))
-
-    for r in locals_list:
-        if r['type'] == 'definition':
-            try:
-                val = safe_eval(r['expr'], symbol_table)
-                if str(val).startswith("Error"):
-                    results[r['id']] = val
+            # Handle Plot Type specifically
+            if r['type'] == 'plot':
+                content = r['expr'] # This is the full 'plot(expr, var, start, end)' string
+                # Extract args more carefully
+                args_str = content[5:-1]
+                # Split by comma but respect parentheses (naive)
+                # Better: find the 4 segments
+                # For now, we expect simple plot(x^2, x, 0, 10)
+                args = [s.strip() for s in args_str.split(',')]
+                if len(args) == 4:
+                    func_expr = parse_latex(args[0])
+                    var = sympy.Symbol(args[1])
+                    start = float(parse_latex(args[2]).evalf())
+                    end = float(parse_latex(args[3]).evalf())
+                    
+                    x_vals = np.linspace(start, end, 100)
+                    # Use subs to resolve other variables in function
+                    f_ready = func_expr.subs(symbol_table)
+                    f = sympy.lambdify(var, f_ready, "numpy")
+                    y_vals = f(x_vals)
+                    
+                    # Handle if y_vals is a single number (constant function)
+                    if np.isscalar(y_vals):
+                        y_vals = np.full_like(x_vals, y_vals)
+                    
+                    results[r['id']] = {
+                        'type': 'plot',
+                        'data': [{'x': float(x), 'y': float(y)} for x, y in zip(x_vals, y_vals)]
+                    }
+                    continue
                 else:
-                    symbol_table[parse_latex(r['name'])] = val
-                    results[r['id']] = str(val)
-            except Exception:
-                results[r['id']] = "Error"
-        elif r['type'] == 'expression':
-            try:
-                val = safe_eval(r['expr'], symbol_table)
-                results[r['id']] = str(val)
-            except Exception:
-                results[r['id']] = "Error"
+                    results[r['id']] = "Error: plot(expr, var, start, end)"
+                    continue
+
+            expr = r['expr']
+            current_val = expr.subs(symbol_table)
+            
+            if r['symbolic']:
+                res = sympy.simplify(current_val)
+                result_str = str(res)
+            else:
+                res = current_val.evalf()
+                if res.is_number:
+                    result_str = f"{float(res):.4g}"
+                else:
+                    if res.free_symbols:
+                        result_str = f"Error: Undefined {res.free_symbols}"
+                    else:
+                        result_str = str(res)
+
+            if r['type'] in ['definition', 'global_definition']:
+                lhs_symbol = parse_latex(r['name'])
+                symbol_table[lhs_symbol] = res
+                results[r['id']] = result_str
+            else:
+                results[r['id']] = result_str
+
+        except Exception as e:
+            results[r['id']] = f"Error: {str(e)}"
 
     return results
 
