@@ -23,7 +23,7 @@
 - **Requirement:** Every new feature MUST include a corresponding test file in the test folder.
 - **Framework:** Use parameterized tests where possible.
 - **Verification:** Always run test and linting before finalizing any task.
-
+- **UPDATE TODOS AND FEATURES**: After completion, update TODOs.md and Features.md with TODOs and Features respectively.  Todos can be known items to finish or suggessted features.  Features should be checked to make sure all features are completed.
 ## 5. Explicit Boundaries (Do NOT Touch)
 - **Forbidden:** Never modify files in `.github/workflows/` or `scripts/deploy.sh`.
 - **Secrets:** Do not touch `.env.example` or any `.env` file.
