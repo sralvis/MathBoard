@@ -8,6 +8,78 @@ import numpy as np
 ureg = UnitRegistry()
 Q_ = ureg.Quantity
 
+# Base Symbol Table
+# Note: sympy.sqrt is a function, not a FunctionClass. This causes issues with sympify in subs.
+# We should not put raw python functions in the symbol table if we intend to use them in subs directly
+# unless we wrap them or they are supported.
+# However, standard functions like sin, cos are FunctionClasses.
+# For sqrt, we might rely on the parser to produce 'sqrt' function call if preprocessed to \sqrt.
+# If we have 'sqrt' in the text, it becomes Symbol('sqrt').
+# We can't sub Symbol('sqrt') with a python function.
+# But \sqrt parses to a Power object (x**0.5).
+
+BASE_SYMBOL_TABLE = {
+    'pi': sympy.pi,
+    'e': sympy.E,
+    'g': 9.80665,
+    'sin': sympy.sin,
+    'cos': sympy.cos,
+    'tan': sympy.tan,
+    # 'sqrt': sympy.sqrt,  <-- Removed to avoid SympifyError
+    'log': sympy.log,
+    'ln': sympy.ln,
+    'exp': sympy.exp,
+    'abs': sympy.Abs
+}
+
+def preprocess_latex(latex_str):
+    """
+    Converts standard math function names to LaTeX commands.
+    e.g. 'sin(x)' -> '\\sin(x)'
+    """
+    # List of functions to convert
+    # Removed sqrt because \sqrt requires braces {}, not parens.
+    funcs = ['sin', 'cos', 'tan', 'log', 'ln', 'exp']
+
+    # We use regex to replace whole words only, not preceded by backslash
+    for func in funcs:
+        # Pattern: lookbehind for no backslash, lookboundary, word, lookboundary
+        # Python re doesn't support variable length lookbehind easily, but we can do:
+        # (?:^|[^\\])\bfunc\b -> but we need to preserve the char before.
+        # Simpler: replace \bfunc\b with \func, then fix double backslashes if any?
+        # Or just use positive lookbehind if the pattern is fixed length? No.
+
+        # We want to match ' sin ' or '(sin' or 'sin('.
+        # Regex: (?<!\\)\b(sin|cos|...)\b
+        pattern = r'(?<!\\)\b' + func + r'\b'
+        latex_str = re.sub(pattern, r'\\' + func, latex_str)
+
+    return latex_str
+
+def parse_plot_args(args_str):
+    """
+    Parses comma-separated arguments, respecting nested parentheses.
+    """
+    args = []
+    current = []
+    depth = 0
+
+    for char in args_str:
+        if char == ',' and depth == 0:
+            args.append("".join(current).strip())
+            current = []
+        else:
+            if char == '(':
+                depth += 1
+            elif char == ')':
+                depth -= 1
+            current.append(char)
+
+    if current:
+        args.append("".join(current).strip())
+
+    return args
+
 def parse_latex_expression(expression_str):
     """
     Parses a LaTeX string into a SymPy expression or assignment.
@@ -50,18 +122,8 @@ def parse_latex_expression(expression_str):
         clean_expr = clean_expr[:-1]
 
     # Special case for plot command: plot(expr, var, start, end)
-    # We use a regex because antlr latex parser might fail on 'plot'
-    plot_match = re.match(r'^plot\((.*)\)$', clean_expr)
-    if plot_match:
-        # We'll return a special type or just the parsed content
-        # For now, let's keep it as an expression but mark it
-        try:
-            # Try to parse the inside as a comma-separated list
-            # This is tricky for nested commas, but we'll try a simple split for now
-            # or just return the whole thing and handle it in evaluation
-            return ('plot', None, clean_expr, is_symbolic)
-        except:
-            pass
+    if clean_expr.startswith('plot(') and clean_expr.endswith(')'):
+        return ('plot', None, clean_expr, is_symbolic)
 
     return ('expression', None, parse_latex(clean_expr), is_symbolic)
 
@@ -69,18 +131,17 @@ def evaluate_worksheet(regions):
     """
     Evaluates a list of regions based on position and scope.
     """
-    symbol_table = {
-        'pi': sympy.pi,
-        'e': sympy.E,
-        'g': 9.80665
-    }
+    symbol_table = BASE_SYMBOL_TABLE.copy()
     
     results = {}
     parsed_regions = []
 
     for region in regions:
         try:
-            rtype, rname, rexpr, rsymb = parse_latex_expression(region['content'])
+            # Preprocess content (handled carefully)
+            preprocessed_content = preprocess_latex(region['content'])
+
+            rtype, rname, rexpr, rsymb = parse_latex_expression(preprocessed_content)
             parsed_regions.append({
                 'id': region['id'],
                 'x': region['x'],
@@ -100,25 +161,29 @@ def evaluate_worksheet(regions):
             # Handle Plot Type specifically
             if r['type'] == 'plot':
                 content = r['expr'] # This is the full 'plot(expr, var, start, end)' string
-                # Extract args more carefully
+                # Extract args
+                # content looks like "plot(..., ..., ..., ...)"
+                # We strip "plot(" and ")"
                 args_str = content[5:-1]
-                # Split by comma but respect parentheses (naive)
-                # Better: find the 4 segments
-                # For now, we expect simple plot(x^2, x, 0, 10)
-                args = [s.strip() for s in args_str.split(',')]
+
+                args = parse_plot_args(args_str)
+
                 if len(args) == 4:
+                    # Note: args[0] is part of the preprocessed string, so it should be valid latex if preprocess worked.
                     func_expr = parse_latex(args[0])
                     var = sympy.Symbol(args[1])
                     start = float(parse_latex(args[2]).evalf())
                     end = float(parse_latex(args[3]).evalf())
                     
                     x_vals = np.linspace(start, end, 100)
-                    # Use subs to resolve other variables in function
+
+                    # Resolve symbols
                     f_ready = func_expr.subs(symbol_table)
+
+                    # Lambdify
                     f = sympy.lambdify(var, f_ready, "numpy")
                     y_vals = f(x_vals)
                     
-                    # Handle if y_vals is a single number (constant function)
                     if np.isscalar(y_vals):
                         y_vals = np.full_like(x_vals, y_vals)
                     
@@ -132,8 +197,14 @@ def evaluate_worksheet(regions):
                     continue
 
             expr = r['expr']
-            current_val = expr.subs(symbol_table)
             
+            # Substitute symbols from table
+            try:
+                current_val = expr.subs(symbol_table)
+            except Exception as e:
+                # Fallback or pass
+                current_val = expr
+
             if r['symbolic']:
                 res = sympy.simplify(current_val)
                 result_str = str(res)
@@ -142,6 +213,7 @@ def evaluate_worksheet(regions):
                 if res.is_number:
                     result_str = f"{float(res):.4g}"
                 else:
+                    # check if free symbols remain
                     if res.free_symbols:
                         result_str = f"Error: Undefined {res.free_symbols}"
                     else:
